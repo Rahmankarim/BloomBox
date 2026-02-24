@@ -147,15 +147,58 @@ export const MESSAGE_SUGGESTIONS: Record<string, string[]> = {
 }
 
 export function encodeBouquet(config: BouquetConfig): string {
-  const data = JSON.stringify(config)
-  return btoa(encodeURIComponent(data))
+  // Create a minimal version of the config to reduce URL length
+  const minimalConfig = {
+    f: config.flowers.map(f => [f.flowerId, f.count]),
+    p: config.positions?.map(p => [p.flowerId, Math.round(p.x), Math.round(p.y), Math.round(p.rotation * 100) / 100, Math.round(p.scale * 100) / 100]),
+    b: config.background,
+    o: config.occasion,
+    m: config.message,
+    s: config.senderName,
+    r: config.receiverName,
+  }
+  
+  const data = JSON.stringify(minimalConfig)
+  // Use btoa directly on the JSON string and make it URL-safe
+  return btoa(data)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 export function decodeBouquet(encoded: string): BouquetConfig | null {
   try {
-    const data = decodeURIComponent(atob(encoded))
-    return JSON.parse(data) as BouquetConfig
-  } catch {
+    // Convert URL-safe base64 back to regular base64
+    let base64 = encoded
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+    
+    // Add padding if needed
+    while (base64.length % 4) {
+      base64 += '='
+    }
+    
+    const data = atob(base64)
+    const minimalConfig = JSON.parse(data) as any
+    
+    // Convert back to full config
+    return {
+      flowers: minimalConfig.f.map((f: any) => ({ flowerId: f[0], count: f[1] })),
+      positions: minimalConfig.p?.map((p: any) => ({
+        flowerId: p[0],
+        x: p[1],
+        y: p[2],
+        rotation: p[3],
+        scale: p[4],
+      })),
+      background: minimalConfig.b,
+      occasion: minimalConfig.o,
+      message: minimalConfig.m,
+      senderName: minimalConfig.s,
+      receiverName: minimalConfig.r,
+    }
+  } catch (error) {
+    console.error('Failed to decode bouquet:', error)
     return null
   }
 }
